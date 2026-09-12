@@ -95,6 +95,16 @@ const value = app.query({
     rateLimiter.getValue(ctx, limit as LimitName, { key }),
 });
 
+const credit = app.mutation({
+  args: {
+    limit: vLimit,
+    key: v.optional(v.string()),
+    count: v.optional(v.number()),
+  },
+  handler: async (ctx, { limit, key, count }) =>
+    rateLimiter.credit(ctx, limit as LimitName, { key, count }),
+});
+
 const reset = app.mutation({
   args: { limit: vLimit, key: v.optional(v.string()) },
   handler: async (ctx, { limit, key }) =>
@@ -133,6 +143,7 @@ const resetInlineAsync = app.mutation({
 const { api, createTest } = app.defineModules({
   limits: {
     consume,
+    credit,
     check,
     value,
     reset,
@@ -244,6 +255,33 @@ describe("asynchronous", () => {
     );
   });
 
+  test("credit queues its write and restores capacity", async () => {
+    const t = createTest();
+    for (let i = 0; i < 3; i++) {
+      await t.mutation(api.limits.consume, { limit: "async" });
+    }
+    await drain(t);
+    expect((await t.query(api.limits.check, { limit: "async" })).ok).toBe(
+      false,
+    );
+
+    await t.mutation(api.limits.credit, { limit: "async", count: 2 });
+    // The credit is queued for the worker, so nothing has changed yet.
+    expect(await valueOf(t, "async")).toBe(0);
+    await drain(t);
+
+    expect(await valueOf(t, "async")).toBeGreaterThanOrEqual(2);
+    expect((await t.query(api.limits.check, { limit: "async" })).ok).toBe(true);
+  });
+
+  test("credit never restores an asynchronous limit to above its capacity", async () => {
+    const t = createTest();
+    await t.mutation(api.limits.consume, { limit: "async" });
+    await t.mutation(api.limits.credit, { limit: "async", count: 100 });
+    await drain(t);
+    expect(await valueOf(t, "async")).toBe(3);
+  });
+
   test("hookAPI resolves its configured key against an asynchronous limit", async () => {
     const t = createTest();
     expect((await t.query(api.limits.getRateLimit, {})).value).toBe(3);
@@ -279,5 +317,47 @@ describe("transactional", () => {
     expect((await t.mutation(api.limits.consume, { limit: "strict" })).ok).toBe(
       false,
     );
+  });
+
+  test("credit restores capacity", async () => {
+    const t = createTest();
+    for (let i = 0; i < 3; i++) {
+      await t.mutation(api.limits.consume, { limit: "strict" });
+    }
+    await t.mutation(api.limits.credit, { limit: "strict", count: 2 });
+
+    expect(await valueOf(t, "strict")).toBe(2);
+    expect((await t.mutation(api.limits.consume, { limit: "strict" })).ok).toBe(
+      true,
+    );
+  });
+
+  test("credit defaults to restoring one token", async () => {
+    const t = createTest();
+    await t.mutation(api.limits.consume, { limit: "strict", count: 3 });
+    await t.mutation(api.limits.credit, { limit: "strict" });
+    expect(await valueOf(t, "strict")).toBe(1);
+  });
+
+  test("credit only restores the key it was given", async () => {
+    const t = createTest();
+    for (const key of ["a", "b"]) {
+      await t.mutation(api.limits.consume, { limit: "strict", count: 3, key });
+    }
+    await t.mutation(api.limits.credit, {
+      limit: "strict",
+      count: 3,
+      key: "a",
+    });
+
+    expect(await valueOf(t, "strict", "a")).toBe(3);
+    expect(await valueOf(t, "strict", "b")).toBe(0);
+  });
+
+  test("credit never restores a limit above capacity", async () => {
+    const t = createTest();
+    await t.mutation(api.limits.consume, { limit: "strict" });
+    await t.mutation(api.limits.credit, { limit: "strict", count: 100 });
+    expect(await valueOf(t, "strict")).toBe(3);
   });
 });
