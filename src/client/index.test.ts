@@ -102,7 +102,7 @@ const credit = app.mutation({
     count: v.optional(v.number()),
   },
   handler: async (ctx, { limit, key, count }) =>
-    rateLimiter.credit(ctx, limit as LimitName, { key, count }),
+    rateLimiter.credit(ctx, limit, { key, count }),
 });
 
 const reset = app.mutation({

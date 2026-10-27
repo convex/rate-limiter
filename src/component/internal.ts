@@ -146,9 +146,9 @@ export function creditShard(
 }
 
 /**
- * Work out which shards a credit should land on. Up to two shards are picked
- * at random, the same way limiting picks them, so that a credit never takes a
- * read dependency on every shard. Excess credits are discarded.
+ * Work out which shards a credit should land on. Two shards are picked at
+ * random and the credit is split to help balance the resulting values of the shards. This avoids taking
+ * a read dependency on every shard. Excess credits are discarded.
  */
 export async function creditRateLimitSharded(
   db: DatabaseReader,
@@ -163,32 +163,44 @@ export async function creditRateLimitSharded(
   const now = Date.now();
 
   const [oneShard, twoShard] = getTwoRandomShards(shards);
-  const updates = [];
-  let remaining = count;
-
+  const oneDoc = await getShard(db, args.name, args.key, oneShard);
+  const one = oneDoc && {
+    doc: oneDoc,
+    ...calculateRateLimit(oneDoc, config, now),
+  };
+  if (shards < MIN_CHOOSE_TWO) return creditSingle(one, count, config);
+  const twoDoc = await getShard(db, args.name, args.key, twoShard);
+  const two = twoDoc && {
+    doc: twoDoc,
+    ...calculateRateLimit(twoDoc, config, now),
+  };
   // A shard with no document is already at capacity, so there's nothing to
   // give back to it.
-  const oneDoc = await getShard(db, args.name, args.key, oneShard);
-  if (oneDoc) {
-    const one = calculateRateLimit(oneDoc, config, now);
-    const oneCredit = creditShard(one.value, count, config);
-    if (oneCredit.credited > 0) {
-      updates.push({ doc: oneDoc, value: oneCredit.value, ts: one.ts });
-      remaining -= oneCredit.credited;
-    }
-  }
+  if (!one || !two) return creditSingle(one ?? two, count, config);
 
-  if (remaining <= 0 || shards < MIN_CHOOSE_TWO) return updates;
-
-  // Try applying the leftover credit to a second random shard.
-  const twoDoc = await getShard(db, args.name, args.key, twoShard);
-  if (!twoDoc) return updates;
-  const two = calculateRateLimit(twoDoc, config, now);
-  const twoCredit = creditShard(two.value, remaining, config);
-  if (twoCredit.credited > 0) {
-    updates.push({ doc: twoDoc, value: twoCredit.value, ts: two.ts });
+  // Try to balance the shards
+  if (one.value + count <= two.value) {
+    return creditSingle(one, count, config);
   }
-  return updates;
+  if (two.value + count <= one.value) {
+    return creditSingle(two, count, config);
+  }
+  // Split the credit so both shards end up with the same value.
+  const balance = one.value + two.value + count;
+  return [
+    ...creditSingle(one, balance / 2 - one.value, config),
+    ...creditSingle(two, balance / 2 - two.value, config),
+  ];
+}
+
+function creditSingle(
+  shard: { doc: Doc<"rateLimits">; value: number; ts: number } | null,
+  count: number,
+  config: Infer<typeof configValidator>,
+) {
+  if (!shard) return [];
+  const { value, credited } = creditShard(shard.value, count, config);
+  return credited > 0 ? [{ doc: shard.doc, value, ts: shard.ts }] : [];
 }
 
 /**

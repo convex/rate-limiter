@@ -196,8 +196,11 @@ await rateLimiter.credit(ctx, "sendMessage", { key: userId });
 await rateLimiter.credit(ctx, "llmTokens", { count: reserved - used });
 ```
 
-The rate limit is capped at its `rate` (or `capacity`, if set). Any excess is
-discarded.
+It is capped at its `capacity` (defaults to `rate`). Any excess is discarded.
+
+For a [sharded](#scaling-rate-limiting-with-shards) rate limit, two random
+shards are selected and the credit is split between them so that they end up
+with as close to the same value as possible. Any leftover credit is discarded.
 
 ### Reset a rate limit
 
@@ -356,17 +359,13 @@ with more capacity, to keep them relatively balanced, based on the
 We will also combine the capacity of the two shards if neither has enough on
 their own.
 
-#### Resetting or crediting a sharded rate limit
+#### Resetting a sharded rate limit
 
 Resetting a sharded rate limit will read and write to all of the shards, which
 may cause OCC conflicts if there are many concurent requests. If your use-case
 involves frequent resets, consider
 [applying updates asynchronously](#avoiding-contention-with-asynchronous-updates)
 instead of sharding.
-
-Crediting a sharded rate limit will apply the credit to a random shard. If there
-is any credit leftover, it will pick a second random shard to apply the excess
-to. Any credit leftover beyond this point will be discarded.
 
 ### Reserving capacity:
 

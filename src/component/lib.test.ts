@@ -507,16 +507,45 @@ describe.each(["token bucket", "fixed window"] as const)(
       expect(values.filter((value) => value === 0)).toHaveLength(2);
     });
 
-    test("stops at one shard when it takes the whole credit", async () => {
+    test("splits a credit evenly between two level shards", async () => {
       const t = convexTest(schema, modules);
-      const name = "onlyone";
+      const name = "even";
       const config = shardedConfig([0, 0, 0]);
       await withShards(t, name, [0, 0, 0]);
 
       await t.mutation(api.lib.creditRateLimit, { name, config, count: 10 });
       const values = await shardValues(t, name);
-      expect(values.filter((value) => value === 10)).toHaveLength(1);
-      expect(values.filter((value) => value === 0)).toHaveLength(2);
+      expect(values.filter((value) => value === 5)).toHaveLength(2);
+      expect(values.filter((value) => value === 0)).toHaveLength(1);
+    });
+
+    test("splits a credit so the two shards end up balance", async () => {
+      const t = convexTest(schema, modules);
+      const name = "balance";
+      const config = shardedConfig([2, 0, 0]);
+      await withShards(t, name, [2, 0, 0]);
+      // Picks shards 0 and 1.
+      vi.spyOn(Math, "random").mockReturnValue(0);
+
+      await t.mutation(api.lib.creditRateLimit, { name, config, count: 6 });
+      expect(await shardValues(t, name)).toEqual([4, 4, 0]);
+
+      // Both are capped at capacity, and the rest is discarded.
+      await t.mutation(api.lib.creditRateLimit, { name, config, count: 20 });
+      expect(await shardValues(t, name)).toEqual([10, 10, 0]);
+      vi.restoreAllMocks();
+    });
+
+    test("gives the whole credit to a shard too far behind to balance", async () => {
+      const t = convexTest(schema, modules);
+      const name = "behind";
+      const config = shardedConfig([8, 2, 0]);
+      await withShards(t, name, [8, 2, 0]);
+      vi.spyOn(Math, "random").mockReturnValue(0);
+
+      await t.mutation(api.lib.creditRateLimit, { name, config, count: 4 });
+      expect(await shardValues(t, name)).toEqual([8, 6, 0]);
+      vi.restoreAllMocks();
     });
 
     test("only reads one shard when there are too few to choose two", async () => {
