@@ -186,6 +186,22 @@ await rateLimiter.limit(ctx, "failedLogins", { key: userId, throws: true });
 const status = await rateLimiter.check(ctx, "failedLogins", { key: userId });
 ```
 
+### Credit capacity back to a rate limit
+
+```ts
+// Give back the token that was consumed for a request that failed.
+await rateLimiter.credit(ctx, "sendMessage", { key: userId });
+
+// Credit a custom count, e.g. to settle a reservation made up-front.
+await rateLimiter.credit(ctx, "llmTokens", { count: reserved - used });
+```
+
+It is capped at its `capacity` (defaults to `rate`). Any excess is discarded.
+
+For a [sharded](#scaling-rate-limiting-with-shards) rate limit, two random
+shards are selected and the credit is split between them so that they end up
+with as close to the same value as possible. Any leftover credit is discarded.
+
 ### Reset a rate limit
 
 ```ts
@@ -342,6 +358,14 @@ with more capacity, to keep them relatively balanced, based on the
 [power of two technique](https://www.eecs.harvard.edu/~michaelm/postscripts/tpds2001.pdf).
 We will also combine the capacity of the two shards if neither has enough on
 their own.
+
+#### Resetting a sharded rate limit
+
+Resetting a sharded rate limit will read and write to all of the shards, which
+may cause OCC conflicts if there are many concurent requests. If your use-case
+involves frequent resets, consider
+[applying updates asynchronously](#avoiding-contention-with-asynchronous-updates)
+instead of sharding.
 
 ### Reserving capacity:
 

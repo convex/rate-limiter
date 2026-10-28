@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Add `rateLimiter.credit(...)` to give capacity back to a rate limit.
+
 ## 0.4.2
 
 - Updates the /test entrypoint for compatibility with convex-test's new
