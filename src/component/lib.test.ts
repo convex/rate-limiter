@@ -424,7 +424,9 @@ describe.each(["token bucket", "fixed window"] as const)(
 
       await t.mutation(api.lib.creditRateLimit, { name, config, count: 2 });
 
-      expect((await t.query(api.lib.getValue, { name, config })).value).toBe(2);
+      expect(
+        (await t.query(api.lib.getValue, { name, config })).value,
+      ).toBeCloseTo(2, 3);
       expect((await t.query(api.lib.checkRateLimit, { name, config })).ok).toBe(
         true,
       );

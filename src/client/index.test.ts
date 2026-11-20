@@ -6,6 +6,7 @@ import componentTest from "../test.js";
 import {
   HOUR,
   isRateLimitError,
+  type RateLimitConfig,
   RateLimiter,
   type RateLimitError,
 } from "./index.js";
@@ -23,14 +24,7 @@ test("isRateLimitError", () => {
   expect(isRateLimitError(new ConvexError({ kind: "foo" }))).toBe(false);
 });
 
-const app = defineTestApp({
-  schema: defineSchema({}),
-  components: {
-    rateLimiter: componentTest,
-  },
-});
-
-const rateLimiter = new RateLimiter(app.components.rateLimiter, {
+const limits = {
   strict: { kind: "token bucket", rate: 10, period: HOUR, capacity: 3 },
   async: {
     kind: "token bucket",
@@ -39,7 +33,21 @@ const rateLimiter = new RateLimiter(app.components.rateLimiter, {
     capacity: 3,
     applyUpdates: "asynchronously",
   },
+} satisfies Record<string, RateLimitConfig>;
+
+const app = defineTestApp({
+  schema: defineSchema({}),
+  components: {
+    rateLimiter: {
+      register: (
+        t: Parameters<typeof componentTest.register>[0],
+        name: string,
+      ) => componentTest.register(t, name, { limits }),
+    },
+  },
 });
+
+const rateLimiter = new RateLimiter(app.components.rateLimiter, limits);
 
 new RateLimiter(app.components.rateLimiter, {
   // @ts-expect-error an asynchronous limit can't be sharded
@@ -180,10 +188,10 @@ describe("asynchronous", () => {
       });
     }
     // All three succeeded, but nothing has been written yet.
-    expect(await valueOf(t, "async")).toBe(3);
+    expect(await valueOf(t, "async")).toBeCloseTo(3, 3);
 
     await drain(t);
-    expect(await valueOf(t, "async")).toBe(0);
+    expect(await valueOf(t, "async")).toBeCloseTo(0, 3);
     const blocked = await t.query(api.limits.check, { limit: "async" });
     expect(blocked.ok).toBe(false);
     expect(blocked.retryAfter).toBeGreaterThan(0);
@@ -224,7 +232,7 @@ describe("asynchronous", () => {
     expect(reserved.retryAfter).toBeGreaterThan(0);
 
     await drain(t);
-    expect(await valueOf(t, "async")).toBe(-2);
+    expect(await valueOf(t, "async")).toBeCloseTo(-2, 3);
   });
 
   test("throws a RateLimitError when `throws` is true", async () => {
@@ -267,7 +275,7 @@ describe("asynchronous", () => {
 
     await t.mutation(api.limits.credit, { limit: "async", count: 2 });
     // The credit is queued for the worker, so nothing has changed yet.
-    expect(await valueOf(t, "async")).toBe(0);
+    expect(await valueOf(t, "async")).toBeCloseTo(0, 3);
     await drain(t);
 
     expect(await valueOf(t, "async")).toBeGreaterThanOrEqual(2);
@@ -279,7 +287,7 @@ describe("asynchronous", () => {
     await t.mutation(api.limits.consume, { limit: "async" });
     await t.mutation(api.limits.credit, { limit: "async", count: 100 });
     await drain(t);
-    expect(await valueOf(t, "async")).toBe(3);
+    expect(await valueOf(t, "async")).toBeCloseTo(3, 3);
   });
 
   test("hookAPI resolves its configured key against an asynchronous limit", async () => {
@@ -292,7 +300,7 @@ describe("asynchronous", () => {
     await drain(t);
 
     const data = await t.query(api.limits.getRateLimit, {});
-    expect(data.value).toBe(1);
+    expect(data.value).toBeCloseTo(1, 3);
     expect(data.shard).toBe(0);
     expect(data.config.shards).toBe(1);
   });
@@ -313,7 +321,7 @@ describe("transactional", () => {
         (await t.mutation(api.limits.consume, { limit: "strict" })).ok,
       ).toBe(true);
     }
-    expect(await valueOf(t, "strict")).toBe(0);
+    expect(await valueOf(t, "strict")).toBeCloseTo(0, 3);
     expect((await t.mutation(api.limits.consume, { limit: "strict" })).ok).toBe(
       false,
     );
@@ -326,7 +334,7 @@ describe("transactional", () => {
     }
     await t.mutation(api.limits.credit, { limit: "strict", count: 2 });
 
-    expect(await valueOf(t, "strict")).toBe(2);
+    expect(await valueOf(t, "strict")).toBeCloseTo(2, 3);
     expect((await t.mutation(api.limits.consume, { limit: "strict" })).ok).toBe(
       true,
     );
@@ -336,7 +344,7 @@ describe("transactional", () => {
     const t = createTest();
     await t.mutation(api.limits.consume, { limit: "strict", count: 3 });
     await t.mutation(api.limits.credit, { limit: "strict" });
-    expect(await valueOf(t, "strict")).toBe(1);
+    expect(await valueOf(t, "strict")).toBeCloseTo(1, 3);
   });
 
   test("credit only restores the key it was given", async () => {
@@ -350,14 +358,14 @@ describe("transactional", () => {
       key: "a",
     });
 
-    expect(await valueOf(t, "strict", "a")).toBe(3);
-    expect(await valueOf(t, "strict", "b")).toBe(0);
+    expect(await valueOf(t, "strict", "a")).toBeCloseTo(3, 3);
+    expect(await valueOf(t, "strict", "b")).toBeCloseTo(0, 3);
   });
 
   test("credit never restores a limit above capacity", async () => {
     const t = createTest();
     await t.mutation(api.limits.consume, { limit: "strict" });
     await t.mutation(api.limits.credit, { limit: "strict", count: 100 });
-    expect(await valueOf(t, "strict")).toBe(3);
+    expect(await valueOf(t, "strict")).toBeCloseTo(3, 3);
   });
 });

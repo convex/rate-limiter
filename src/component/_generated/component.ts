@@ -28,7 +28,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
         "query",
         "internal",
         {
-          config:
+          config?:
             | {
                 applyUpdates?: "transactionally" | "asynchronously";
                 capacity?: number;
@@ -69,7 +69,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
         "mutation",
         "internal",
         {
-          config:
+          config?:
             | {
                 applyUpdates?: "transactionally" | "asynchronously";
                 capacity?: number;
@@ -103,7 +103,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
         {
           updates: Array<
             | {
-                config:
+                config?:
                   | {
                       applyUpdates?: "transactionally" | "asynchronously";
                       capacity?: number;
@@ -131,7 +131,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                 ts: number;
               }
             | {
-                config:
+                config?:
                   | {
                       applyUpdates?: "transactionally" | "asynchronously";
                       capacity?: number;
@@ -174,7 +174,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
         "query",
         "internal",
         {
-          config:
+          config?:
             | {
                 applyUpdates?: "transactionally" | "asynchronously";
                 capacity?: number;
@@ -231,7 +231,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
         "mutation",
         "internal",
         {
-          config:
+          config?:
             | {
                 applyUpdates?: "transactionally" | "asynchronously";
                 capacity?: number;
