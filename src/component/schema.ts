@@ -1,8 +1,13 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
-import { vPendingUpdate } from "../shared.js";
+import { configValidator, vPendingUpdate } from "../shared.js";
 
 export default defineSchema({
+  limits: defineTable({
+    name: v.string(),
+    config: configValidator,
+  }).index("name", ["name"]),
+
   rateLimits: defineTable({
     name: v.string(),
     key: v.optional(v.string()), // undefined is singleton

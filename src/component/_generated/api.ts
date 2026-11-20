@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as init from "../init.js";
 import type * as internal_ from "../internal.js";
 import type * as lib from "../lib.js";
 import type * as time from "../time.js";
@@ -21,6 +22,7 @@ import type {
 import { anyApi, componentsGeneric } from "convex/server";
 
 const fullApi: ApiFromModules<{
+  init: typeof init;
   internal: typeof internal_;
   lib: typeof lib;
   time: typeof time;

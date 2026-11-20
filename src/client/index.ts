@@ -65,8 +65,10 @@ export function isRateLimitError(
  *
  * @param component The rate limiter component. Like `components.rateLimiter`.
  *   Imported like `import { components } from "./_generated/api.js";`
- * @param limits The rate limits to define. The key is the name of the rate limit.
- * See {@link RateLimitConfig} for more information.
+ * @param limits The named rate limits, keyed by name. Pass the same object as
+ * `args: { limits }` in `app.use(rateLimiter, ...)`: checks use the definition
+ * stored at push, and these only supply types and whether a limit applies
+ * updates asynchronously. See {@link RateLimitConfig} for more information.
  * @returns A rate limiter that has types based on the provided limits.
  * If you provide a different name, you will need to provide the config inline.
  */
@@ -107,8 +109,8 @@ export class RateLimiter<
       ? [WithKnownNameOrInlinedConfig<Limits, Name, RateLimitArgs>?]
       : [WithKnownNameOrInlinedConfig<Limits, Name, RateLimitArgs>]
   ): Promise<RateLimitReturns> {
-    const config = this.getConfig(options[0], name);
-    const args = { ...options[0], name, config };
+    const { config, inline } = this.getConfig(options[0], name);
+    const args = { ...options[0], name, config: inline };
     return config.applyUpdates === "asynchronously"
       ? runStaleQuery(ctx, this.component.lib.checkRateLimit, args)
       : ctx.runQuery(this.component.lib.checkRateLimit, args);
@@ -142,15 +144,11 @@ export class RateLimiter<
       ? [WithKnownNameOrInlinedConfig<Limits, Name, RateLimitArgs>?]
       : [WithKnownNameOrInlinedConfig<Limits, Name, RateLimitArgs>]
   ): Promise<RateLimitReturns> {
-    const config = this.getConfig(options[0], name);
+    const { config, inline } = this.getConfig(options[0], name);
+    const args = { ...options[0], name, config: inline };
     if (config.applyUpdates !== "asynchronously") {
-      return ctx.runMutation(this.component.lib.rateLimit, {
-        ...options[0],
-        name,
-        config,
-      });
+      return ctx.runMutation(this.component.lib.rateLimit, args);
     }
-    const args = { ...options[0], name, config };
     const status = await runStaleQuery(
       ctx,
       this.component.lib.checkRateLimit,
@@ -165,7 +163,7 @@ export class RateLimiter<
           name,
           key,
           count: count ?? 1,
-          config,
+          config: inline,
           ts: Date.now(),
         },
       ],
@@ -191,19 +189,19 @@ export class RateLimiter<
       ? [WithKnownNameOrInlinedConfig<Limits, Name, CreditArgs>?]
       : [WithKnownNameOrInlinedConfig<Limits, Name, CreditArgs>]
   ): Promise<void> {
-    const config = this.getConfig(options[0], name);
+    const { config, inline } = this.getConfig(options[0], name);
     const { key, count = 1 } = options[0] ?? {};
     if (config.applyUpdates !== "asynchronously") {
       await ctx.runMutation(this.component.lib.creditRateLimit, {
         name,
         key,
         count,
-        config,
+        config: inline,
       });
       return;
     }
     await ctx.runMutation(this.component.lib.enqueueUpdates, {
-      updates: [{ kind: "credit", name, key, count, config }],
+      updates: [{ kind: "credit", name, key, count, config: inline }],
     });
   }
 
@@ -265,8 +263,8 @@ export class RateLimiter<
           >,
         ]
   ): Promise<GetValueReturns> {
-    const config = this.getConfig(options[0], name);
-    const args = { ...options[0], name, config };
+    const { config, inline } = this.getConfig(options[0], name);
+    const args = { ...options[0], name, config: inline };
     return config.applyUpdates === "asynchronously"
       ? runStaleQuery(ctx, this.component.lib.getValue, args)
       : ctx.runQuery(this.component.lib.getValue, args);
@@ -321,7 +319,7 @@ export class RateLimiter<
             ...args,
             key,
             name: finalName,
-            config: args.config ?? this.getConfig(options[0], finalName),
+            config: args.config ?? this.getConfig(options[0], finalName).inline,
           });
         },
       }),
@@ -338,10 +336,9 @@ export class RateLimiter<
   private getConfig<Name extends string, Args>(
     args: WithKnownNameOrInlinedConfig<Limits, Name, Args> | undefined,
     name: Name,
-  ): RateLimitConfig {
-    const config =
-      (args && "config" in args && args.config) ||
-      (this.limits && this.limits[name]);
+  ): { config: RateLimitConfig; inline: RateLimitConfig | undefined } {
+    const inline = (args && "config" in args && args.config) || undefined;
+    const config = inline || (this.limits && this.limits[name]);
     if (!config) {
       throw new Error(
         `Rate limit ${name} not defined. ` +
@@ -356,7 +353,7 @@ export class RateLimiter<
         `Rate limit ${name} applies updates asynchronously and can't be sharded.`,
       );
     }
-    return config;
+    return { config, inline };
   }
 }
 
