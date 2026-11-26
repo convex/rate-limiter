@@ -30,6 +30,8 @@ export type {
   RateLimitReturns,
 };
 
+type CheckArgs = RateLimitArgs & { now?: number };
+
 export const SECOND = 1000;
 export const MINUTE = 60 * SECOND;
 export const HOUR = 60 * MINUTE;
@@ -82,6 +84,9 @@ export class RateLimiter<
    * Check a rate limit.
    * This function will check the rate limit and return whether the request is
    * allowed, and if not, when it could be retried.
+   * Pass a client timestamp in milliseconds as `now` to keep a calling query
+   * cacheable. It defaults to Date.now(). For reactive displays, query
+   * {@link getValue} and calculate availability on the client, as the React helpers do.
    * Unlike {@link limit}, this function does not consume any tokens.
    *
    * @param ctx The ctx object from a query or mutation, including runQuery.
@@ -104,11 +109,16 @@ export class RateLimiter<
     ctx: QueryCtx | MutationCtx | ActionCtx,
     name: Name,
     ...options: Name extends keyof Limits & string
-      ? [WithKnownNameOrInlinedConfig<Limits, Name, RateLimitArgs>?]
-      : [WithKnownNameOrInlinedConfig<Limits, Name, RateLimitArgs>]
+      ? [WithKnownNameOrInlinedConfig<Limits, Name, CheckArgs>?]
+      : [WithKnownNameOrInlinedConfig<Limits, Name, CheckArgs>]
   ): Promise<RateLimitReturns> {
     const config = this.getConfig(options[0], name);
-    const args = { ...options[0], name, config };
+    const args = {
+      ...options[0],
+      name,
+      config,
+      now: options[0]?.now ?? Date.now(),
+    };
     return config.applyUpdates === "asynchronously"
       ? runStaleQuery(ctx, this.component.lib.checkRateLimit, args)
       : ctx.runQuery(this.component.lib.checkRateLimit, args);
@@ -150,7 +160,7 @@ export class RateLimiter<
         config,
       });
     }
-    const args = { ...options[0], name, config };
+    const args = { ...options[0], name, config, now: Date.now() };
     const status = await runStaleQuery(
       ctx,
       this.component.lib.checkRateLimit,
@@ -166,7 +176,7 @@ export class RateLimiter<
           key,
           count: count ?? 1,
           config,
-          ts: Date.now(),
+          ts: args.now,
         },
       ],
     });

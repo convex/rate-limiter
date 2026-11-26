@@ -29,7 +29,10 @@ export const rateLimit = mutation({
         `Rate limit config for ${args.name} has \`applyUpdates: "asynchronously"\`. Limit consumption must be enqueued.`,
       );
     }
-    const { status, updates } = await checkRateLimitOrThrow(ctx.db, args);
+    const { status, updates } = await checkRateLimitOrThrow(ctx.db, {
+      ...args,
+      now: Date.now(),
+    });
     for (const { value, ts, existing, shard } of updates) {
       if (existing) {
         await ctx.db.patch("rateLimits", existing._id, { ts, value });
@@ -61,7 +64,7 @@ export const creditRateLimit = mutation({
 });
 
 export const checkRateLimit = query({
-  args: rateLimitArgs,
+  args: { ...rateLimitArgs, now: v.number() },
   returns: rateLimitReturns,
   handler: async (ctx, args) => {
     const { status } = await checkRateLimitOrThrow(ctx.db, args);

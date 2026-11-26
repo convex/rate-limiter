@@ -25,7 +25,7 @@ export function getTwoRandomShards(shards: number): [number, number] {
 
 export async function checkRateLimitOrThrow(
   db: DatabaseReader,
-  args: RateLimitArgs,
+  args: RateLimitArgs & { now: number },
 ) {
   const result = await checkRateLimitSharded(db, args);
   if (result.status.retryAfter && args.throws) {
@@ -40,7 +40,7 @@ export async function checkRateLimitOrThrow(
 
 async function checkRateLimitSharded(
   db: DatabaseReader,
-  args: RateLimitArgs,
+  args: RateLimitArgs & { now: number },
 ): Promise<{
   status: RateLimitReturns;
   updates: {
@@ -81,12 +81,14 @@ async function checkRateLimitSharded(
     // Calculated so they both end up with the same value, to help balance.
     one.value + count - balance / 2,
     args.reserve,
+    args.now,
   );
   const twoShared = _checkRateLimitInternal(
     two.existing,
     config,
     two.value + count - balance / 2,
     args.reserve,
+    args.now,
   );
   if (!oneShared.status.ok && !twoShared.status.ok) {
     // Still didn't work, wait until there's enough combined capacity.
@@ -259,12 +261,18 @@ function returnSingle(result: Awaited<ReturnType<typeof checkShard>>) {
 
 async function checkShard(
   db: DatabaseReader,
-  args: RateLimitArgs,
+  args: RateLimitArgs & { now: number },
   shard: number,
 ) {
   const existing = await getShard(db, args.name, args.key, shard);
   const { config, count, reserve } = args;
-  const result = _checkRateLimitInternal(existing, config, count, reserve);
+  const result = _checkRateLimitInternal(
+    existing,
+    config,
+    count,
+    reserve,
+    args.now,
+  );
   return { ...result, shard, existing };
 }
 
@@ -301,8 +309,8 @@ export function _checkRateLimitInternal(
   config: Infer<typeof configValidator>,
   count: number = 1,
   reserve: boolean = false,
+  now = Date.now(),
 ) {
-  const now = Date.now();
   const { value, ts, retryAfter } = calculateRateLimit(
     existing,
     config,

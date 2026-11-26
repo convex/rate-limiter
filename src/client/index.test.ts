@@ -84,9 +84,13 @@ const consume = app.mutation({
 });
 
 const check = app.query({
-  args: { limit: vLimit, key: v.optional(v.string()) },
-  handler: async (ctx, { limit, key }) =>
-    rateLimiter.check(ctx, limit as LimitName, { key }),
+  args: {
+    limit: vLimit,
+    key: v.optional(v.string()),
+    now: v.optional(v.number()),
+  },
+  handler: async (ctx, { limit, key, now }) =>
+    rateLimiter.check(ctx, limit as LimitName, { key, now }),
 });
 
 const value = app.query({
@@ -162,6 +166,20 @@ async function drain(t: TestConvex) {
 async function valueOf(t: TestConvex, limit: LimitName, key?: string) {
   return (await t.query(api.limits.value, { limit, key })).value;
 }
+
+test("check uses the supplied time to evaluate a refill", async () => {
+  const t = createTest();
+  const limit = "strict" as const;
+  await t.mutation(api.limits.consume, { limit, count: 3 });
+  const { ts } = await t.query(api.limits.value, { limit });
+  expect(await t.query(api.limits.check, { limit, now: ts })).toEqual({
+    ok: false,
+    retryAfter: HOUR / 10,
+  });
+  expect(
+    (await t.query(api.limits.check, { limit, now: ts + HOUR / 10 })).ok,
+  ).toBe(true);
+});
 
 describe("asynchronous", () => {
   beforeEach(() => {

@@ -24,6 +24,7 @@ describe.each(["token bucket", "fixed window"] as const)(
       const config = { kind, rate: 1, period: Second };
       await t.run(async (ctx) => {
         const before = await ctx.runQuery(api.lib.checkRateLimit, {
+          now: Date.now(),
           name,
           config,
         });
@@ -36,6 +37,7 @@ describe.each(["token bucket", "fixed window"] as const)(
         expect(actual.ok).toBe(true);
         expect(actual.retryAfter).toBe(undefined);
         const after = await ctx.runQuery(api.lib.checkRateLimit, {
+          now: Date.now(),
           name,
           config,
         });
@@ -117,6 +119,7 @@ describe.each(["token bucket", "fixed window"] as const)(
       const config = { kind, rate: 1, period: Second, capacity: 3 };
       await t.run(async (ctx) => {
         const before = await ctx.runQuery(api.lib.checkRateLimit, {
+          now: Date.now(),
           name,
           config,
           count: 3,
@@ -280,6 +283,7 @@ describe.each(["token bucket", "fixed window"] as const)(
       const config = { kind, rate: 1, period: Second };
       await t.run(async (ctx) => {
         const before = await ctx.runQuery(api.lib.checkRateLimit, {
+          now: Date.now(),
           name,
           config,
         });
@@ -287,6 +291,7 @@ describe.each(["token bucket", "fixed window"] as const)(
         expect(before.retryAfter).toBe(undefined);
         await ctx.runMutation(api.lib.resetRateLimit, { name });
         const after = await ctx.runQuery(api.lib.checkRateLimit, {
+          now: Date.now(),
           name,
           config,
         });
@@ -302,6 +307,7 @@ describe.each(["token bucket", "fixed window"] as const)(
       const config = { kind, rate: 1, period: Second };
       await t.run(async (ctx) => {
         const before = await ctx.runQuery(api.lib.checkRateLimit, {
+          now: Date.now(),
           name,
           config,
           key,
@@ -310,6 +316,7 @@ describe.each(["token bucket", "fixed window"] as const)(
         expect(before.retryAfter).toBe(undefined);
         await ctx.runMutation(api.lib.resetRateLimit, { name, key });
         const after = await ctx.runQuery(api.lib.checkRateLimit, {
+          now: Date.now(),
           name,
           config,
           key,
@@ -325,6 +332,7 @@ describe.each(["token bucket", "fixed window"] as const)(
       const config = { kind, rate: 1, period: Hour };
       await t.run(async (ctx) => {
         const before = await ctx.runQuery(api.lib.checkRateLimit, {
+          now: Date.now(),
           name,
           config,
         });
@@ -339,6 +347,7 @@ describe.each(["token bucket", "fixed window"] as const)(
         expect(reserved.ok).toBe(true);
         expect(reserved.retryAfter).toBeGreaterThan(0);
         const noSimple = await ctx.runQuery(api.lib.checkRateLimit, {
+          now: Date.now(),
           name,
           config,
         });
@@ -358,6 +367,7 @@ describe.each(["token bucket", "fixed window"] as const)(
       };
       await t.run(async (ctx) => {
         const check = await ctx.runQuery(api.lib.checkRateLimit, {
+          now: Date.now(),
           name,
           config,
           count: 2,
@@ -373,6 +383,7 @@ describe.each(["token bucket", "fixed window"] as const)(
         expect(reserved.ok).toBe(true);
         expect(reserved.retryAfter).toBeGreaterThan(0);
         const noSimple = await ctx.runQuery(api.lib.checkRateLimit, {
+          now: Date.now(),
           name,
           config,
         });
@@ -418,16 +429,28 @@ describe.each(["token bucket", "fixed window"] as const)(
       for (let i = 0; i < 3; i++) {
         await t.mutation(api.lib.rateLimit, { name, config });
       }
-      expect((await t.query(api.lib.checkRateLimit, { name, config })).ok).toBe(
-        false,
-      );
+      expect(
+        (
+          await t.query(api.lib.checkRateLimit, {
+            now: Date.now(),
+            name,
+            config,
+          })
+        ).ok,
+      ).toBe(false);
 
       await t.mutation(api.lib.creditRateLimit, { name, config, count: 2 });
 
       expect((await t.query(api.lib.getValue, { name, config })).value).toBe(2);
-      expect((await t.query(api.lib.checkRateLimit, { name, config })).ok).toBe(
-        true,
-      );
+      expect(
+        (
+          await t.query(api.lib.checkRateLimit, {
+            now: Date.now(),
+            name,
+            config,
+          })
+        ).ok,
+      ).toBe(true);
     });
 
     test("never credits past capacity", async () => {
@@ -660,7 +683,11 @@ describe("asynchronous configs", () => {
   test("are readable, since the async path checks through the same query", async () => {
     const t = convexTest(schema, modules);
     expect(
-      await t.query(api.lib.checkRateLimit, { name: "async", config }),
+      await t.query(api.lib.checkRateLimit, {
+        now: Date.now(),
+        name: "async",
+        config,
+      }),
     ).toEqual({ ok: true, retryAfter: undefined });
     const { value, config: applied } = await t.query(api.lib.getValue, {
       name: "async",

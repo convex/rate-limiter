@@ -52,6 +52,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
           count?: number;
           key?: string;
           name: string;
+          now: number;
           reserve?: boolean;
           throws?: boolean;
         },
