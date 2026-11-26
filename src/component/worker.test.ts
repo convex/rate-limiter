@@ -87,7 +87,11 @@ describe("worker", () => {
     expect(await shards(t)).toHaveLength(0);
     expect(await pending(t)).toHaveLength(1);
     expect(
-      await t.query(api.lib.checkRateLimit, { name: "simple", config }),
+      await t.query(api.lib.checkRateLimit, {
+        now: Date.now(),
+        name: "simple",
+        config,
+      }),
     ).toEqual({ ok: true, retryAfter: undefined });
 
     await drain(t);
@@ -98,6 +102,7 @@ describe("worker", () => {
     expect(applied[0].shard).toBe(SINGLETON_SHARD);
     expect(applied[0].value).toBe(0);
     const after = await t.query(api.lib.checkRateLimit, {
+      now: Date.now(),
       name: "simple",
       config,
     });
@@ -176,7 +181,11 @@ describe("worker", () => {
 
     expect(await shards(t)).toHaveLength(0);
     expect(
-      await t.query(api.lib.checkRateLimit, { name: "resettable", config }),
+      await t.query(api.lib.checkRateLimit, {
+        now: Date.now(),
+        name: "resettable",
+        config,
+      }),
     ).toEqual({ ok: true, retryAfter: undefined });
   });
 

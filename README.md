@@ -186,6 +186,11 @@ await rateLimiter.limit(ctx, "failedLogins", { key: userId, throws: true });
 const status = await rateLimiter.check(ctx, "failedLogins", { key: userId });
 ```
 
+`check` defaults to `Date.now()`. To keep a Convex query cacheable, pass a
+client-supplied Unix timestamp in milliseconds as the `now` option. For a
+reactive display, query `rateLimiter.getValue` and use `calculateRateLimit` on
+the client as time advances, as the React helpers do.
+
 ### Credit capacity back to a rate limit
 
 ```ts

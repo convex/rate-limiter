@@ -30,6 +30,7 @@ describe.each(["token bucket", "fixed window"] as const)(
       const config = { kind, rate: 1, period: Second };
       await t.run(async (ctx) => {
         const { status, updates } = await checkRateLimitOrThrow(ctx.db, {
+          now: Date.now(),
           name,
           config,
         });
@@ -55,6 +56,7 @@ describe.each(["token bucket", "fixed window"] as const)(
         });
 
         return checkRateLimitOrThrow(ctx.db, {
+          now: Date.now(),
           name,
           config,
         });
@@ -69,6 +71,7 @@ describe.each(["token bucket", "fixed window"] as const)(
       await expect(() =>
         t.run((ctx) =>
           checkRateLimitOrThrow(ctx.db, {
+            now: Date.now(),
             name: "simple",
             count: 2,
             config: {
@@ -110,6 +113,7 @@ describe.each(["token bucket", "fixed window"] as const)(
         });
 
         return checkRateLimitOrThrow(ctx.db, {
+          now: Date.now(),
           name,
           config,
           key: "key",
@@ -239,6 +243,7 @@ describe.each(["token bucket", "fixed window"] as const)(
       await expect(() =>
         t.run(async (ctx) => {
           await checkRateLimitOrThrow(ctx.db, {
+            now: Date.now(),
             name: "simple",
             count: 4,
             reserve: true,
@@ -281,6 +286,7 @@ describe.each([1, 2, 3, 4] as const)("sharding: %s", (shards) => {
         await ctx.db.insert("rateLimits", { name, shard, ts, value: 1 });
       }
       const { status, updates } = await checkRateLimitOrThrow(ctx.db, {
+        now: Date.now(),
         name,
         config,
       });
@@ -298,6 +304,7 @@ describe.each([1, 2, 3, 4] as const)("sharding: %s", (shards) => {
         await ctx.db.insert("rateLimits", { name, shard, ts, value: 0 });
       }
       const { status, updates } = await checkRateLimitOrThrow(ctx.db, {
+        now: Date.now(),
         name,
         config,
         reserve: true,
@@ -318,6 +325,7 @@ describe.each([1, 2, 3, 4] as const)("sharding: %s", (shards) => {
           await ctx.db.insert("rateLimits", { name, shard, ts, value: 0 });
         }
         await checkRateLimitOrThrow(ctx.db, {
+          now: Date.now(),
           name,
           config,
           throws: true,
@@ -340,6 +348,7 @@ describe.each([1, 2, 3, 4] as const)("sharding: %s", (shards) => {
         });
       }
       const { status, updates } = await checkRateLimitOrThrow(ctx.db, {
+        now: Date.now(),
         name,
         config,
       });
@@ -357,6 +366,7 @@ describe.each([1, 2, 3, 4] as const)("sharding: %s", (shards) => {
         await ctx.db.insert("rateLimits", { name, shard, ts, value: 1 });
       }
       const { status, updates } = await checkRateLimitOrThrow(ctx.db, {
+        now: Date.now(),
         name,
         config: { ...config, maxReserved: 1 },
         count: 3,
@@ -381,6 +391,7 @@ describe.each([1, 2, 3, 4] as const)("sharding: %s", (shards) => {
         });
       }
       const { status, updates } = await checkRateLimitOrThrow(ctx.db, {
+        now: Date.now(),
         name,
         config: { ...config, maxReserved: shards, rate: shards },
         count: 2,
@@ -402,6 +413,7 @@ describe.each([1, 2, 3, 4] as const)("sharding: %s", (shards) => {
           await ctx.db.insert("rateLimits", { name, shard, ts, value: 0.5 });
         }
         const { status, updates } = await checkRateLimitOrThrow(ctx.db, {
+          now: Date.now(),
           name,
           config,
         });

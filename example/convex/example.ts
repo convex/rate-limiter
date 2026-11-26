@@ -145,7 +145,7 @@ export const inlineVanilla = internalMutation({
       assert(before.retryAfter === undefined);
       const after = await ctx.runQuery(
         components.rateLimiter.lib.checkRateLimit,
-        { name: "simple " + kind, config },
+        { now: Date.now(), name: "simple " + kind, config },
       );
       assert(!after.ok);
       assert(after.retryAfter! > 0);
@@ -154,7 +154,7 @@ export const inlineVanilla = internalMutation({
       });
       const after2 = await ctx.runQuery(
         components.rateLimiter.lib.checkRateLimit,
-        { name: "simple " + kind, config },
+        { now: Date.now(), name: "simple " + kind, config },
       );
       assert(after2.ok);
       assert(after2.retryAfter === undefined);
