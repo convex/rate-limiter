@@ -268,6 +268,29 @@ async function checkShard(
   return { ...result, shard, existing };
 }
 
+/**
+ * An inline config takes precedence over the definition stored by the
+ * component's init.
+ */
+export async function resolveConfig(
+  db: DatabaseReader,
+  name: string,
+  config: Infer<typeof configValidator> | undefined,
+) {
+  if (config) return config;
+  const limit = await db
+    .query("limits")
+    .withIndex("name", (q) => q.eq("name", name))
+    .unique();
+  if (!limit) {
+    throw new Error(
+      `Rate limit ${name} not defined. ` +
+        `Pass a config inline or define it in the rate limiter's install args.`,
+    );
+  }
+  return limit.config;
+}
+
 export async function getShard(
   db: DatabaseReader,
   name: string,

@@ -7,7 +7,7 @@ import {
   rateLimitArgs,
   configValidator,
   rateLimitReturns,
-  vPendingUpdate,
+  vEnqueuedUpdate,
   type GetValueReturns,
 } from "../shared.js";
 import {
@@ -15,6 +15,7 @@ import {
   configWithDefaults,
   creditRateLimitSharded,
   getShard,
+  resolveConfig,
   validateCredit,
 } from "./internal.js";
 import { api } from "./_generated/api.js";
@@ -24,12 +25,16 @@ export const rateLimit = mutation({
   args: rateLimitArgs,
   returns: rateLimitReturns,
   handler: async (ctx, args) => {
-    if (args.config.applyUpdates === "asynchronously") {
+    const config = await resolveConfig(ctx.db, args.name, args.config);
+    if (config.applyUpdates === "asynchronously") {
       throw new Error(
         `Rate limit config for ${args.name} has \`applyUpdates: "asynchronously"\`. Limit consumption must be enqueued.`,
       );
     }
-    const { status, updates } = await checkRateLimitOrThrow(ctx.db, args);
+    const { status, updates } = await checkRateLimitOrThrow(ctx.db, {
+      ...args,
+      config,
+    });
     for (const { value, ts, existing, shard } of updates) {
       if (existing) {
         await ctx.db.patch("rateLimits", existing._id, { ts, value });
@@ -47,12 +52,13 @@ export const creditRateLimit = mutation({
   args: creditArgs,
   returns: v.null(),
   handler: async (ctx, args) => {
-    if (args.config.applyUpdates === "asynchronously") {
+    const config = await resolveConfig(ctx.db, args.name, args.config);
+    if (config.applyUpdates === "asynchronously") {
       throw new Error(
         `Rate limit config for ${args.name} has \`applyUpdates: "asynchronously"\`. Credits must be enqueued.`,
       );
     }
-    const updates = await creditRateLimitSharded(ctx.db, args);
+    const updates = await creditRateLimitSharded(ctx.db, { ...args, config });
     for (const { doc, value, ts } of updates) {
       await ctx.db.patch("rateLimits", doc._id, { value, ts });
     }
@@ -64,7 +70,8 @@ export const checkRateLimit = query({
   args: rateLimitArgs,
   returns: rateLimitReturns,
   handler: async (ctx, args) => {
-    const { status } = await checkRateLimitOrThrow(ctx.db, args);
+    const config = await resolveConfig(ctx.db, args.name, args.config);
+    const { status } = await checkRateLimitOrThrow(ctx.db, { ...args, config });
     return status;
   },
 });
@@ -73,12 +80,14 @@ export const getValue = query({
   args: {
     name: v.string(),
     key: v.optional(v.string()),
-    config: configValidator,
+    config: v.optional(configValidator),
     sampleShards: v.optional(v.number()),
   },
   returns: getValueReturns,
   handler: async (ctx, args): Promise<GetValueReturns> => {
-    const config = configWithDefaults(args.config);
+    const config = configWithDefaults(
+      await resolveConfig(ctx.db, args.name, args.config),
+    );
     const samplesToTake = Math.min(args.sampleShards || 1, config.shards);
 
     const shardIndices = Array.from({ length: config.shards }, (_, i) => i);
@@ -129,22 +138,24 @@ export const getValue = query({
 export const enqueueUpdates = mutation({
   // Accept an array of updates to allow for implementing a batch enqueue
   // method in the future, if needed.
-  args: { updates: v.array(vPendingUpdate) },
+  args: { updates: v.array(vEnqueuedUpdate) },
   returns: v.null(),
-  handler: async (ctx, { updates }) => {
-    for (const update of updates) {
-      if (
-        update.kind !== "reset" &&
-        update.config.applyUpdates === "transactionally"
-      ) {
-        throw new Error(
-          `Rate limit config for ${update.name} has \`applyUpdates: "transactionally"\` and can't be enqueued.`,
-        );
-      }
-      if (update.kind === "credit") {
-        validateCredit(update.name, update.count);
-      }
-    }
+  handler: async (ctx, args) => {
+    const updates = await Promise.all(
+      args.updates.map(async (update) => {
+        if (update.kind === "reset") return update;
+        const config = await resolveConfig(ctx.db, update.name, update.config);
+        if (config.applyUpdates === "transactionally") {
+          throw new Error(
+            `Rate limit config for ${update.name} has \`applyUpdates: "transactionally"\` and can't be enqueued.`,
+          );
+        }
+        if (update.kind === "credit") {
+          validateCredit(update.name, update.count);
+        }
+        return { ...update, config };
+      }),
+    );
     await Promise.all(
       updates.map((update) =>
         ctx.db.insert("pendingUpdates", {

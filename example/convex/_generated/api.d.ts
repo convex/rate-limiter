@@ -11,6 +11,7 @@
 import type * as example from "../example.js";
 import type * as loadTest from "../loadTest.js";
 import type * as playground from "../playground.js";
+import type * as rateLimits from "../rateLimits.js";
 
 import type {
   ApiFromModules,
@@ -22,6 +23,7 @@ declare const fullApi: ApiFromModules<{
   example: typeof example;
   loadTest: typeof loadTest;
   playground: typeof playground;
+  rateLimits: typeof rateLimits;
 }>;
 
 /**

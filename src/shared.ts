@@ -106,7 +106,7 @@ export const rateLimitArgs = {
   count: v.optional(v.number()),
   reserve: v.optional(v.boolean()),
   throws: v.optional(v.boolean()),
-  config: configValidator,
+  config: v.optional(configValidator),
   // TODO: allow specifying the shard to use here
 };
 
@@ -154,7 +154,7 @@ export const creditArgs = {
   name: v.string(),
   key: v.optional(v.string()),
   count: v.number(),
-  config: configValidator,
+  config: v.optional(configValidator),
 };
 
 export type CreditArgs = {
@@ -204,27 +204,38 @@ export type GetValueReturns = Infer<typeof getValueReturns>;
  */
 export const SINGLETON_SHARD = 0;
 
+const vConsumeUpdate = v.object({
+  kind: v.literal("consume"),
+  name: v.string(),
+  key: v.optional(v.string()),
+  count: v.number(),
+  config: configValidator,
+  ts: v.number(),
+});
+const vCreditUpdate = v.object({
+  kind: v.literal("credit"),
+  name: v.string(),
+  key: v.optional(v.string()),
+  count: v.number(),
+  config: configValidator,
+});
+const vResetUpdate = v.object({
+  kind: v.literal("reset"),
+  name: v.string(),
+  key: v.optional(v.string()),
+});
+
 export const vPendingUpdate = v.union(
-  v.object({
-    kind: v.literal("consume"),
-    name: v.string(),
-    key: v.optional(v.string()),
-    count: v.number(),
-    config: configValidator,
-    ts: v.number(),
-  }),
-  v.object({
-    kind: v.literal("credit"),
-    name: v.string(),
-    key: v.optional(v.string()),
-    count: v.number(),
-    config: configValidator,
-  }),
-  v.object({
-    kind: v.literal("reset"),
-    name: v.string(),
-    key: v.optional(v.string()),
-  }),
+  vConsumeUpdate,
+  vCreditUpdate,
+  vResetUpdate,
+);
+
+/** A {@link vPendingUpdate} whose config may be omitted for a named limit. */
+export const vEnqueuedUpdate = v.union(
+  vConsumeUpdate.omit("config").extend({ config: v.optional(configValidator) }),
+  vCreditUpdate.omit("config").extend({ config: v.optional(configValidator) }),
+  vResetUpdate,
 );
 
 export type PendingUpdate = Infer<typeof vPendingUpdate>;
